@@ -1,10 +1,10 @@
 from ga import GeneticAlgorithm
 
 if __name__ == '__main__':
-    dataset_path = 'Dataset/test.txt'
+    dataset_path = 'Dataset/accidents.txt'
     min_utility = 30
-    population_size = 20
-    generations = 20
+    population_size = 50
+    generations = 100
     crossover_prob = 0.8
     mutation_prob = 0.1
 
