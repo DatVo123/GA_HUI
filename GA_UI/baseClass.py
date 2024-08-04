@@ -1,6 +1,7 @@
 from bitarray import bitarray
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing as cpu
+
 class Chromosome:
     def __init__(self, bits, fitness=0):
         self.bits = bits
@@ -48,6 +49,7 @@ class TransactionProcessor:
         for item in items:
             tran_bits[item - 1] = 1
         return Transaction(tran_bits, value_items, len(tran_bits))
+
 class FitnessCalculator:
     def __init__(self, transactions, chromosome_bits):
         self.transactions = transactions
@@ -56,13 +58,14 @@ class FitnessCalculator:
 
     def calc_fitness(self, transaction):
         fitness = 0
-        for element in transaction:
-            mask = element.tran_bits & self.chromosome_bits
-            if mask == self.chromosome_bits:
-                for pos in self.chromosome_bits.search(bitarray("1")):
-                    fitness += element.value_items.get(pos + 1, 0)
+        mask = transaction.tran_bits & self.chromosome_bits
+        if mask == self.chromosome_bits:
+            for pos in range(len(self.chromosome_bits)):
+                if self.chromosome_bits[pos] == 1:
+                    fitness += transaction.value_items.get(pos + 1, 0)
         return fitness
-    
+
+
     def calculate(self):
         segment_size = (len(self.transactions) + self.num_workers - 1) // self.num_workers
         futures = []
@@ -72,8 +75,14 @@ class FitnessCalculator:
                 start = i * segment_size
                 end = None if i == self.num_workers - 1 else (i + 1) * segment_size
                 segment = self.transactions[start:end]
-                futures.append(executor.submit(self.calc_fitness, segment))
+                futures.append(executor.submit(self.process_segment, segment))
 
             total_fitness = sum(future.result() for future in as_completed(futures))
 
-        return total_fitness 
+        return total_fitness
+
+    def process_segment(self, segment):
+        total_fitness = 0
+        for transaction in segment:
+            total_fitness += self.calc_fitness(transaction)
+        return total_fitness

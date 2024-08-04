@@ -1,6 +1,6 @@
 from HUI_Miner_Algorithm import HUIMiner
 if __name__ == "__main__":
-    minUtility = 15
+    minUtility = 5000
     inputPath = "Dataset/smallDb.txt"
     outputPath = "outputMiner.txt"
     hui_miner = HUIMiner()

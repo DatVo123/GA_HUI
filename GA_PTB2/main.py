@@ -1,137 +1,215 @@
-from bitarray import bitarray
-import random
-from bitarray.util import ba2int, int2ba
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QFileDialog, QMessageBox, QGroupBox, QGridLayout, 
+)
+import sys
+from ga import GeneticAlgorithm  # Adjust import if you need other classes or functions
 
-a, b, c = 1, -14, 49
+class GeneticAlgorithmGUI(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.init_ui()
+        
+    def init_ui(self):
+        layout = QVBoxLayout()
+    
+        title = QLabel("Genetic Algorithm To Solve Level 2 Equations")
+        title.setStyleSheet("font-size: 24px; font-weight: bold; text-align: center; color: #00568b;")
 
-class Chromosome:
-    def __init__(self, bits, fitness=0):
-        self.bits = bits
-        self.fitness = fitness
-
-    def crossover(self, other, crossover_point=None):
-        if crossover_point is None:
-            crossover_point = random.randint(1, len(self.bits) - 1)
-
-        child1_bits = self.bits[:crossover_point] + other.bits[crossover_point:]
-        child2_bits = other.bits[:crossover_point] + self.bits[crossover_point:]
-
-        child1 = Chromosome(child1_bits)
-        child2 = Chromosome(child2_bits)
-
-        return child1, child2
-
-def integer_to_bit_array(n, length):
-    return int2ba(n, length)
-
-def bit_array_to_integer(bit_arr):
-    return ba2int(bit_arr)
-
-def create_population(population_size, individual_length=4):
-    population = []
-    for _ in range(population_size):
-        individual = bitarray([random.choice([0, 1]) for _ in range(individual_length)])
-        fitness = calculate_fitness(individual, a, b, c)
-        chromosome = Chromosome(individual, fitness)
-        population.append(chromosome)
-    return population
-
-def calculate_fitness(individual, a, b, c):
-    x = ba2int(individual)
-    return abs(a * x**2 + b * x + c)
-
-def roulette_wheel_selection(population):
-    total_fitness = sum(1.0 / (chromosome.fitness + 1) for chromosome in population)
-    selection_probs = [
-        (1.0 / (chromosome.fitness + 1)) / total_fitness for chromosome in population
-    ]
-
-    selected = random.choices(population, weights=selection_probs, k=len(population))
-    return selected
-
-def tournament_selection(population, tournament_size=3):
-    selected = []
-    for _ in range(len(population)):
-        tournament = random.sample(population, tournament_size)
-        winner = min(tournament, key=lambda x: x.fitness)
-        selected.append(winner)
-    return selected
-
-def rank_selection(population):
-    population = sorted(population, key=lambda x: x.fitness)
-    ranks = range(1, len(population) + 1)
-    total_rank = sum(ranks)
-    selection_probs = [rank / total_rank for rank in ranks]
-
-    selected = random.choices(population, weights=selection_probs, k=len(population))
-    return selected
-
-def mutate(individual, mutation_rate=0.01):
-    for i in range(len(individual.bits)):
-        if random.random() < mutation_rate:
-            individual.bits[i] = not individual.bits[i]
-    individual.fitness = calculate_fitness(individual.bits, a, b, c)
-
-def evolve_population(population, mutation_rate=0.01):
-    new_population = []
-    selected_population = tournament_selection(population)
-    # Lai ghép và đột biến
-    for i in range(0, len(selected_population), 2):
-        parent1 = selected_population[i]
-        parent2 = (
-            selected_population[i + 1]
-            if i + 1 < len(selected_population)
-            else selected_population[0]
+        layout.addWidget(title)
+        
+        # Main Layout
+        main_layout = QHBoxLayout()
+        
+        # Additional Parameters Group Box
+        additional_parameters_layout = QGridLayout()
+        additional_parameters_layout.setSpacing(10)
+        
+        additional_parameters_group = QGroupBox("Additional Parameters")
+        additional_parameters_group.setLayout(additional_parameters_layout)
+        additional_parameters_group.setStyleSheet(
+            """
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 10px;
+            }
+            """
         )
-        child1, child2 = parent1.crossover(parent2)
-
-        # Đột biến
-        mutate(child1, mutation_rate)
-        mutate(child2, mutation_rate)
-
-        new_population.extend([child1, child2])
-
-    # Đảm bảo số lượng cá thể mới bằng số lượng cá thể ban đầu
-    if len(new_population) > len(population):
-        new_population = new_population[: len(population)]
-
-    return new_population
-
-
-def main():
-    population_size = 5
-    individual_length = 4
-    generations = 20
-    # Tạo quần thể ban đầu
-    population = create_population(population_size, individual_length)
-
-    print("Quần thể ban đầu:")
-    for individual in population:
-        print(
-            f"{individual.bits.to01()} => {bit_array_to_integer(individual.bits)}, Fitness: {individual.fitness}"
+        
+        # Add input fields for 'a', 'b', 'c' with default values and adjusted height
+        self.a_input = QLineEdit()
+        self.b_input = QLineEdit()
+        self.c_input = QLineEdit()
+        
+        self.a_input.setFixedHeight(30)
+        self.b_input.setFixedHeight(30)
+        self.c_input.setFixedHeight(30)
+        
+        additional_parameters_layout.addWidget(QLabel("Parameter a:"), 0, 0)
+        additional_parameters_layout.addWidget(self.a_input, 0, 1)
+        additional_parameters_layout.addWidget(QLabel("Parameter b:"), 0, 2)
+        additional_parameters_layout.addWidget(self.b_input, 0, 3)
+        additional_parameters_layout.addWidget(QLabel("Parameter c:"), 1, 0)
+        additional_parameters_layout.addWidget(self.c_input, 1, 1)
+        
+        # Equation Text Area
+        self.equation_text = QTextEdit()
+        self.equation_text.setReadOnly(True)
+        self.equation_text.setStyleSheet("border: 1px solid #00568b; padding: 10px;")
+        self.equation_text.setMinimumWidth(250)
+        
+        # Arrange Additional Parameters and Equation Text Area
+        additional_parameters_container = QVBoxLayout()
+        additional_parameters_container.addWidget(additional_parameters_group)
+        additional_parameters_container.addWidget(self.equation_text)
+        
+        # Genetic Algorithm Parameters Group Box
+        parameters_layout = QGridLayout()
+        parameters_layout.setSpacing(10)
+        
+        parameters_group = QGroupBox("Genetic Algorithm Parameters")
+        parameters_group.setLayout(parameters_layout)
+        parameters_group.setStyleSheet(
+            """
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid gray;
+                border-radius: 5px;
+                padding: 10px;
+            }
+            """
         )
+        
+        # Add input fields for genetic algorithm parameters with default values and adjusted height
+        self.population_size_input = QLineEdit("5")
+        self.individual_length_input = QLineEdit("5")
+        self.generations_input = QLineEdit("5")
+        self.crossover_rate_input = QLineEdit("0.7")
+        self.mutation_rate_input = QLineEdit("0.1")
+        
+        self.population_size_input.setFixedHeight(30)
+        self.individual_length_input.setFixedHeight(30)
+        self.generations_input.setFixedHeight(30)
+        self.crossover_rate_input.setFixedHeight(30)
+        self.mutation_rate_input.setFixedHeight(30)
+        
+        parameters_layout.addWidget(QLabel("Population Size:"), 1, 0)
+        parameters_layout.addWidget(self.population_size_input, 1, 1)
+        parameters_layout.addWidget(QLabel("Individual Length:"), 0, 2)
+        parameters_layout.addWidget(self.individual_length_input, 0, 3)
+        parameters_layout.addWidget(QLabel("Generations:"), 0, 0)
+        parameters_layout.addWidget(self.generations_input, 0, 1)
+        parameters_layout.addWidget(QLabel("Crossover Rate:"), 1, 2)
+        parameters_layout.addWidget(self.crossover_rate_input, 1, 3)
+        parameters_layout.addWidget(QLabel("Mutation Rate:"), 2, 0)
+        parameters_layout.addWidget(self.mutation_rate_input, 2, 1)
+        
+        # Arrange Parameters Group Box
+        parameters_container = QVBoxLayout()
+        parameters_container.addWidget(parameters_group)
+        
+        # Add containers to main layout
+        main_layout.addLayout(additional_parameters_container)
+        main_layout.addLayout(parameters_container)
+        
+        # Buttons Layout
+        button_layout = QHBoxLayout()
+        self.run_button = QPushButton("Run")
+        self.reset_button = QPushButton("Reset")
+        self.save_button = QPushButton("Save Output")
+        
+        self.style_buttons(self.run_button)
+        self.style_buttons(self.reset_button)
+        self.style_buttons(self.save_button)
+        
+        button_layout.addWidget(self.run_button)
+        button_layout.addWidget(self.reset_button)
+        button_layout.addWidget(self.save_button)
+        
+        layout.addLayout(main_layout)
+        layout.addLayout(button_layout)
+        
+        self.output_text = QTextEdit()
+        self.output_text.setReadOnly(True)
+        self.output_text.setStyleSheet("border: 1px solid #00568b; padding: 10px;")
+        layout.addWidget(self.output_text)
+        
+        self.setLayout(layout)
+        self.setWindowTitle("Genetic Algorithm Interface")
+        self.setGeometry(100, 100, 800, 500)
+        
+        self.run_button.clicked.connect(self.run_algorithm)
+        self.reset_button.clicked.connect(self.reset_fields)
+        self.save_button.clicked.connect(self.save_output_to_file)
+        
+        # Connect input field changes to update the equation
+        self.a_input.textChanged.connect(self.update_equation)
+        self.b_input.textChanged.connect(self.update_equation)
+        self.c_input.textChanged.connect(self.update_equation)
 
-    for generation in range(generations):
-        print(f"\nThế hệ {generation + 1}:")
-        population = evolve_population(population)
-        for individual in population:
-            print(
-                f"{individual.bits.to01()} => {bit_array_to_integer(individual.bits)}, Fitness: {individual.fitness}"
-            )
 
-            # Dừng nếu tìm thấy nghiệm với fitness bằng 0
-            if individual.fitness == 0:
-                print(
-                    f"\nNghiệm tìm được ở thế hệ {generation + 1}: x = {bit_array_to_integer(individual.bits)}"
-                )
-                return
+    def style_buttons(self, button):
+        button.setStyleSheet("background-color: #00568b; color: white; font-weight: bold;")
 
-    # Nếu không tìm thấy nghiệm sau số thế hệ đã định
-    best_solution = min(population, key=lambda x: x.fitness)
-    print(
-        f"\nKhông tìm thấy nghiệm chính xác sau {generations} thế hệ. Giá trị gần đúng nhất là x = {bit_array_to_integer(best_solution.bits)}, Fitness: {best_solution.fitness}"
-    )
+    def update_equation(self):
+        try:
+            a = float(self.a_input.text())
+            b = float(self.b_input.text())
+            c = float(self.c_input.text())
+            equation = f"x&sup2; "
 
+            if b < 0:
+                equation += f"- {-b}x "
+            else:
+                equation += f"+ {b}x "
+            if c < 0:
+                equation += f"- {-c} = 0"
+            else:
+                equation += f"+ {c} = 0"
+            self.equation_text.setHtml(equation)
+        except ValueError:
+            self.equation_text.setPlainText("Invalid input for parameters.")
+
+    def run_algorithm(self):
+        try:
+            population_size = int(self.population_size_input.text())
+            individual_length = int(self.individual_length_input.text())
+            generations = int(self.generations_input.text())
+            crossover_rate = float(self.crossover_rate_input.text())
+            mutation_rate = float(self.mutation_rate_input.text())
+            a = float(self.a_input.text())
+            b = float(self.b_input.text())
+            c = float(self.c_input.text())
+
+            # Create a GeneticAlgorithm instance and run it
+            ga = GeneticAlgorithm(population_size, individual_length, a, b, c, crossover_rate, mutation_rate)
+            output = ga.run(generations)
+            self.output_text.setPlainText(output)
+        except ValueError as e:
+            QMessageBox.critical(self, "Input Error", f"Invalid input: {e}")
+
+    def reset_fields(self):
+        self.population_size_input.clear()
+        self.individual_length_input.clear()
+        self.generations_input.clear()
+        self.crossover_rate_input.clear()
+        self.mutation_rate_input.clear()
+        self.a_input.clear()
+        self.b_input.clear()
+        self.c_input.clear()
+        self.output_text.clear()
+        self.equation_text.clear()
+
+    def save_output_to_file(self):
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save Output File", "", "Text Files (*.txt);;All Files (*)", options=options)
+        if file_name:
+            with open(file_name, 'w') as file:
+                file.write(self.output_text.toPlainText())
 
 if __name__ == "__main__":
-    main()
+    app = QApplication(sys.argv)
+    window = GeneticAlgorithmGUI()
+    window.show()
+    sys.exit(app.exec())

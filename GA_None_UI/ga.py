@@ -2,7 +2,6 @@ import random
 import time
 from bitarray import bitarray
 from bitarray.util import ba2int
-
 import psutil
 
 from baseClass import Chromosome, TransactionProcessor, FitnessCalculator
