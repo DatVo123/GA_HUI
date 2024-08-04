@@ -57,6 +57,10 @@ class HUIMiner:
             self.huiMiner([], 0, None, listOfUtilityLists, minUtility)
             self.endTimestamp = time.time()
             self.endMemory = psutil.Process().memory_info().rss / (1024 * 1024)  # Memory in MB
+            executionTime = self.endTimestamp - self.startTimestamp
+            memoryUsage = self.endMemory - self.startMemory
+            self.writer.write(f"\nExecution Time: {executionTime:.2f} seconds\n")
+            self.writer.write(f"Memory Usage: {memoryUsage:.2f} MB\n")
 
     def readTransactions(self, inputPath):
         transactions = []
@@ -109,64 +113,13 @@ class HUIMiner:
             X = ULs[i]
 
             if X.sumIutils >= minUtility:
-                self.writeOut(prefix, prefixLength, X.item, X.sumIutils)
+                self.writeHUI(prefix + [X.item], X.sumIutils)
+                self.huiCount += 1
 
-            if X.sumIutils + X.sumRutils >= minUtility:
-                exULs = []
-                for j in range(i + 1, len(ULs)):
-                    Y = ULs[j]
-                    exULs.append(self.construct(pUL, X, Y))
-                    self.joinCount += 1
+            self.joinCount += 1
 
-                self.itemsetBuffer[prefixLength] = X.item
-                self.huiMiner(self.itemsetBuffer, prefixLength + 1, X, exULs, minUtility)
+            nextULs = [u for u in ULs[i+1:] if u.item > X.item]
+            self.huiMiner(prefix + [X.item], prefixLength + 1, X, nextULs, minUtility)
 
-    def construct(self, P, px, py):
-        pxyUL = UtilityList(py.item)
-
-        for ex in px.elements:
-            ey = self.findElementWithTID(py, ex.tid)
-            if ey is None:
-                continue
-            if P is None:
-                eXY = Element(ex.tid, ex.iutils + ey.iutils, ey.rutils)
-                pxyUL.addElement(eXY)
-            else:
-                e = self.findElementWithTID(P, ex.tid)
-                if e is not None:
-                    eXY = Element(ex.tid, ex.iutils + ey.iutils - e.iutils, ey.rutils)
-                    pxyUL.addElement(eXY)
-        return pxyUL
-
-    def findElementWithTID(self, ulist, tid):
-        first = 0
-        last = len(ulist.elements) - 1
-
-        while first <= last:
-            middle = (first + last) // 2
-            if ulist.elements[middle].tid < tid:
-                first = middle + 1
-            elif ulist.elements[middle].tid > tid:
-                last = middle - 1
-            else:
-                return ulist.elements[middle]
-        return None
-
-    def writeOut(self, prefix, prefixLength, item, utility):
-        self.huiCount += 1
-        output = ' '.join(map(str, prefix[:prefixLength])) + ' ' + str(item) + ' #UTIL: ' + str(utility)
-        self.writer.write(output + '\n')
-
-    def printStats(self):
-        elapsed_time = self.endTimestamp - self.startTimestamp
-        hours = int(elapsed_time // 3600)
-        minutes = int((elapsed_time % 3600) // 60)
-        seconds = elapsed_time % 60
-
-        print("=============  HUI-MINER ALGORITHM - STATS =============")
-        print(f" Total time ~ {hours} giờ {minutes} phút {seconds:.2f} giây")
-        print(" Memory ~", self.endMemory - self.startMemory, "MB")
-        print(" High-utility itemsets count :", self.huiCount)
-        print(" Join count :", self.joinCount)
-        print("===================================================")
-
+    def writeHUI(self, itemset, utility):
+        self.writer.write(f"{' '.join(map(str, itemset))} #UTL: {utility}\n")
