@@ -1,7 +1,8 @@
 import time
-import csv
 import psutil
 from collections import defaultdict
+import bisect
+import csv
 
 class Element:
     def __init__(self, tid, iutils, rutils):
@@ -23,44 +24,31 @@ class UtilityList:
 
 class HUIMiner:
     def __init__(self):
-        self.startTimestamp = 0
-        self.endTimestamp = 0
+        self.times = 0
+        self.memory = 0
         self.huiCount = 0
         self.mapItemToTWU = {}
         self.joinCount = 0
         self.BUFFERS_SIZE = 200
         self.itemsetBuffer = [0] * self.BUFFERS_SIZE
+        self.results = [] 
 
-    def runAlgorithm(self, inputPath, outputPath, minUtility):
-        self.startTimestamp = time.time()
-        self.startMemory = psutil.Process().memory_info().rss / (1024 * 1024)  # Memory in MB
+    def runAlgorithm(self, inputPath, minUtility):
+        startTime = time.time()
+        startMemory = psutil.Process().memory_info().rss
         self.itemsetBuffer = [0] * self.BUFFERS_SIZE
 
-        with open(outputPath, 'w') as writer:
-            self.writer = writer
+        self.mapItemToTWU = defaultdict(int)
+        self.results = []  # Clear previous results
 
-            self.mapItemToTWU = defaultdict(int)
+        transactions = self.readTransactions(inputPath)
+        self.calculateTWU(transactions)
+        listOfUtilityLists, mapItemToUtilityList = self.createUtilityLists(minUtility)
+        self.buildUtilityLists(transactions, mapItemToUtilityList, minUtility)
+        self.huiMiner([], 0, None, listOfUtilityLists, minUtility)
 
-            # Đọc dữ liệu từ tệp đầu vào
-            transactions = self.readTransactions(inputPath)
-
-            # Tính toán TWU cho mỗi mục
-            self.calculateTWU(transactions, minUtility)
-
-            # Tạo danh sách các UtilityList
-            listOfUtilityLists, mapItemToUtilityList = self.createUtilityLists(minUtility)
-
-            # Duyệt qua từng giao dịch và xây dựng UtilityList
-            self.buildUtilityLists(transactions, mapItemToUtilityList, minUtility)
-
-            # Khởi chạy HUI-Miner
-            self.huiMiner([], 0, None, listOfUtilityLists, minUtility)
-            self.endTimestamp = time.time()
-            self.endMemory = psutil.Process().memory_info().rss / (1024 * 1024)  # Memory in MB
-            executionTime = self.endTimestamp - self.startTimestamp
-            memoryUsage = self.endMemory - self.startMemory
-            self.writer.write(f"\nExecution Time: {executionTime:.2f} seconds\n")
-            self.writer.write(f"Memory Usage: {memoryUsage:.2f} MB\n")
+        self.times = time.time()-startTime
+        self.memory = (psutil.Process().memory_info().rss - startMemory) / (1024 * 1024)  # MB
 
     def readTransactions(self, inputPath):
         transactions = []
@@ -73,7 +61,7 @@ class HUIMiner:
                 transactions.append((items, transactionUtility, utilities))
         return transactions
 
-    def calculateTWU(self, transactions, minUtility):
+    def calculateTWU(self, transactions):
         for items, transactionUtility, _ in transactions:
             for item in items:
                 self.mapItemToTWU[item] += transactionUtility
@@ -82,8 +70,8 @@ class HUIMiner:
         listOfUtilityLists = []
         mapItemToUtilityList = {}
 
-        for item in self.mapItemToTWU:
-            if self.mapItemToTWU[item] >= minUtility:
+        for item, twu in self.mapItemToTWU.items():
+            if twu >= minUtility:
                 uList = UtilityList(item)
                 mapItemToUtilityList[item] = uList
                 listOfUtilityLists.append(uList)
@@ -113,13 +101,45 @@ class HUIMiner:
             X = ULs[i]
 
             if X.sumIutils >= minUtility:
-                self.writeHUI(prefix + [X.item], X.sumIutils)
-                self.huiCount += 1
+                self.storeResult(prefix, prefixLength, X.item, X.sumIutils)
 
-            self.joinCount += 1
+            if X.sumIutils + X.sumRutils >= minUtility:
+                exULs = []
+                for j in range(i + 1, len(ULs)):
+                    Y = ULs[j]
+                    exULs.append(self.construct(pUL, X, Y))
+                    self.joinCount += 1
 
-            nextULs = [u for u in ULs[i+1:] if u.item > X.item]
-            self.huiMiner(prefix + [X.item], prefixLength + 1, X, nextULs, minUtility)
+                self.itemsetBuffer[prefixLength] = X.item
+                self.huiMiner(self.itemsetBuffer, prefixLength + 1, X, exULs, minUtility)
 
-    def writeHUI(self, itemset, utility):
-        self.writer.write(f"{' '.join(map(str, itemset))} #UTL: {utility}\n")
+    def construct(self, P, px, py):
+        pxyUL = UtilityList(py.item)
+
+        for ex in px.elements:
+            ey = self.findElementWithTID(py, ex.tid)
+            if ey is None:
+                continue
+            if P is None:
+                eXY = Element(ex.tid, ex.iutils + ey.iutils, ey.rutils)
+                pxyUL.addElement(eXY)
+            else:
+                e = self.findElementWithTID(P, ex.tid)
+                if e is not None:
+                    eXY = Element(ex.tid, ex.iutils + ey.iutils - e.iutils, ey.rutils)
+                    pxyUL.addElement(eXY)
+        return pxyUL
+
+    def findElementWithTID(self, ulist, tid):
+        elements = [e.tid for e in ulist.elements]
+        index = bisect.bisect_left(elements, tid)
+        if index < len(ulist.elements) and ulist.elements[index].tid == tid:
+            return ulist.elements[index]
+        return None
+
+    def storeResult(self, prefix, prefixLength, item, utility):
+        self.huiCount += 1
+        result = ' '.join(map(str, prefix[:prefixLength])) + ' ' + str(item) + ' #UTIL: ' + str(utility)
+        self.results.append(result)
+
+
