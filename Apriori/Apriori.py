@@ -80,6 +80,6 @@ class CApriori:
                 confidence = self.Calculate_confidence(itemset, antecedent, dataset)
                 if confidence >= min_confidence:
                     strong_rules.append(
-                        (antecedent, consequent)
+                        (antecedent, consequent, confidence)
                     )  # ((frozenset(antecedent), frozenset(consequent)))
         return strong_rules

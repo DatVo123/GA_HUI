@@ -142,7 +142,7 @@ class HUIMiner:
         self.huiCount += 1
         output = ' '.join(map(str, prefix[:prefixLength])) + ' ' + str(item) + ' #UTIL: ' + str(utility)
         self.writer.write(output + '\n')
-
+        
     def printStats(self):
         elapsed_time = self.endTimestamp - self.startTimestamp
         hours = int(elapsed_time // 3600)

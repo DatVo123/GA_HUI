@@ -7,7 +7,7 @@ import psutil
 from baseClass import Chromosome, TransactionProcessor, FitnessCalculator
 
 class GeneticAlgorithm:
-    def __init__(self, dataset_path, min_utility, population_size, generations, crossover_prob, mutation_prob, output="output.txt"):
+    def __init__(self, dataset_path, min_utility, population_size, generations, crossover_prob, mutation_prob, output):
         self.dataset_path = dataset_path
         self.population = []
         self.population_size = population_size

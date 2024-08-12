@@ -1,4 +1,0 @@
-bitarray
-psutil
-PyQt6
-flask
