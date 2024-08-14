@@ -2,7 +2,7 @@ from bitarray import bitarray
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing as cpu
 
-class Chromosome:
+class Individual:
     def __init__(self, bits, fitness=0):
         self.bits = bits
         self.fitness = fitness
@@ -50,17 +50,17 @@ class TransactionProcessor:
         return Transaction(tran_bits, value_items, len(tran_bits))
 
 class FitnessCalculator:
-    def __init__(self, transactions, chromosome_bits):
+    def __init__(self, transactions, Individual_bits):
         self.transactions = transactions
-        self.chromosome_bits = chromosome_bits
+        self.Individual_bits = Individual_bits
         self.num_workers = cpu.cpu_count() // 2
 
     def calc_fitness(self, transaction):
         fitness = 0
-        mask = transaction.tran_bits & self.chromosome_bits
-        if mask == self.chromosome_bits:
-            for pos in range(len(self.chromosome_bits)):
-                if self.chromosome_bits[pos] == 1:
+        mask = transaction.tran_bits & self.Individual_bits
+        if mask == self.Individual_bits:
+            for pos in range(len(self.Individual_bits)):
+                if self.Individual_bits[pos] == 1:
                     fitness += transaction.value_items.get(pos + 1, 0)
         return fitness
 

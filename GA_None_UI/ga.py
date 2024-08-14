@@ -1,10 +1,10 @@
+import os
 import random
 import time
 from bitarray import bitarray
-from bitarray.util import ba2int
 import psutil
 
-from baseClass import Chromosome, TransactionProcessor, FitnessCalculator
+from baseClass import Individual, TransactionProcessor, FitnessCalculator
 
 class GeneticAlgorithm:
     def __init__(self, dataset_path, min_utility, population_size, generations, crossover_prob, mutation_prob, output):
@@ -22,11 +22,10 @@ class GeneticAlgorithm:
         self.avg_len = 0
         self.transactions = []
         self.processor = TransactionProcessor()
-        self.existing_chromosomes = set()
         self.total_time = 0
 
     def load_transactions(self):
-        """Load transactions from the dataset and calculate statistics."""
+        """Load transactions from the dataset."""
         print("* Loading transactions...")
         start_time = time.time()
         self.transactions = self.processor.load_transactions(self.dataset_path)
@@ -36,149 +35,234 @@ class GeneticAlgorithm:
         print(f"* Loading successful: ~ {total_time:.3f} s")
         self.total_time += total_time
 
-    def fitness(self, chromosome_bits):
-        """Calculate the fitness of a chromosome."""
-        calculator = FitnessCalculator(self.transactions, chromosome_bits)
+    def fitness(self, Individual_bits):
+        """Calculate the fitness of an individual."""
+        calculator = FitnessCalculator(self.transactions, Individual_bits)
         return calculator.calculate()
 
-    def chromosome_exists(self, chromosome_bits):
-        """Check if a chromosome already exists in the population."""
-        int_bit = ba2int(chromosome_bits)
-        if int_bit in self.existing_chromosomes:
-            return True
-        self.existing_chromosomes.add(int_bit)
+    def individual_exists(self, individual_bits):
+        """Check if an individual already exists in the population."""
+        for Individual in self.population:
+            if Individual.bits == individual_bits:
+                return True
         return False
 
-    def insert_hui_set(self, chromosome):
+    def insert_hui_set(self, individual):
         """Insert a high-utility itemset into the set."""
-        if chromosome.fitness >= self.min_utility:
-            bits_tuple = tuple(chromosome.bits)
-            self.hui_sets.add((bits_tuple, chromosome.fitness))
+        if individual.fitness >= self.min_utility:
+            bits_tuple = tuple(individual.bits)
+            self.hui_sets.add((bits_tuple,individual.fitness))
 
     def generate_initial_population(self):
-        """Generate the initial population of chromosomes."""
+        """Generate the initial population of Individuals."""
         print("* Generating initial population...")
         start_time = time.time()
         population = []
 
         while len(population) < self.population_size:
-            chromosome_bits = bitarray(self.biggest_item)
-            chromosome_bits.setall(0)
+            Individual_bits = bitarray(self.biggest_item)
+            Individual_bits.setall(0)
             
             n = random.randint(1, self.avg_len)
             random_positions = random.sample(range(self.biggest_item), n)
             
             for pos in random_positions:
-                chromosome_bits[pos] = 1
+                Individual_bits[pos] = 1
 
-            chromosome_node = Chromosome(chromosome_bits)
-            chromosome_node.fitness = self.fitness(chromosome_node.bits)
+            individual = Individual(Individual_bits)
+            individual.fitness = self.fitness(individual.bits)
 
-            if not self.chromosome_exists(chromosome_node.bits):
-                self.existing_chromosomes.add(ba2int(chromosome_node.bits))
-                if chromosome_node.fitness >= self.min_utility:
-                    self.insert_hui_set(chromosome_node)
-                population.append(chromosome_node)
+            if not self.individual_exists(individual.bits):
+                if individual.fitness >= self.min_utility:
+                    self.insert_hui_set(individual)
+                population.append(individual)
 
         self.population = sorted(population, key=lambda x: x.fitness, reverse=True)
         total_time = time.time() - start_time
         print(f"* Population generated: ~ {total_time:.3f} s")
         self.total_time += total_time
-
-    def select_parents(self):
-        """Select two parents for crossover."""
-        length = len(self.population)
-        half_length = length // 2
-        parent_1 = self.population[random.randint(0, half_length - 1)]
-        parent_2 = self.population[random.randint(half_length, length - 1)]
-        return parent_1, parent_2
-
-    def crossover(self, parent_1, parent_2):
-        """Perform crossover between two parents."""
+    
+    def tournament_selection(self):
+        """Select a subset of individuals and choose the best one from the subset."""
+        k = random.randint(1,5)
+        tournament = random.sample(self.population, k)
+        return max(tournament, key=lambda x: x.fitness)
+    
+    def roulette_wheel_selection(self):
+        """Select an individual based on the fitness proportionate to the total fitness of the population."""
+        total_fitness = sum(individual.fitness for individual in self.population)
+        if total_fitness == 0:
+            return random.choice(self.population)
+        
+        selection_probabilities = [individual.fitness / total_fitness for individual in self.population]
+        selected_index = random.choices(range(len(self.population)), weights=selection_probabilities, k=1)[0]
+        return self.population[selected_index]
+    
+    def rank_selection(self):
+        """Select an individual based on its rank in the sorted population."""
+        sorted_population = sorted(self.population, key=lambda x: x.fitness, reverse=True)
+        total_ranks = sum(range(1, len(sorted_population) + 1))
+        rank_probabilities = [rank / total_ranks for rank in range(1, len(sorted_population) + 1)]
+        selected_index = random.choices(range(len(sorted_population)), weights=rank_probabilities, k=1)[0]
+        return sorted_population[selected_index]
+    
+    def single_point_crossover(self, parent_1, parent_2):
+        """Perform single_point crossover between two parents."""
         s = random.randint(1, self.biggest_item // 2)
         e = random.randint(s + 1, self.biggest_item - 1)
         child_1_bits = parent_1.bits[:s] + parent_2.bits[s:e] + parent_1.bits[e:]
         child_2_bits = parent_2.bits[:s] + parent_1.bits[s:e] + parent_2.bits[e:]
-        child_1 = Chromosome(child_1_bits, self.fitness(child_1_bits))
-        child_2 = Chromosome(child_2_bits, self.fitness(child_2_bits))
+        child_1 = Individual(child_1_bits, self.fitness(child_1_bits))
+        child_2 = Individual(child_2_bits, self.fitness(child_2_bits))
+        return child_1, child_2
+    
+    def multi_point_crossover(self, parent_1, parent_2):
+        """Perform multi-point crossover between two parents with random k."""
+        k = random.randint(1, 5)
+        points = sorted(random.sample(range(self.biggest_item), k))
+        child_1_bits = parent_1.bits[:points[0]]
+        child_2_bits = parent_2.bits[:points[0]]
+        
+        for i in range(len(points) - 1):
+            if i % 2 == 0:
+                child_1_bits += parent_2.bits[points[i]:points[i + 1]]
+                child_2_bits += parent_1.bits[points[i]:points[i + 1]]
+            else:
+                child_1_bits += parent_1.bits[points[i]:points[i + 1]]
+                child_2_bits += parent_2.bits[points[i]:points[i + 1]]
+
+        if len(points) % 2 == 0:
+            child_1_bits += parent_2.bits[points[-1]:]
+            child_2_bits += parent_1.bits[points[-1]:]
+        else:
+            child_1_bits += parent_1.bits[points[-1]:]
+            child_2_bits += parent_2.bits[points[-1]:]
+        
+        child_1 = Individual(child_1_bits, self.fitness(child_1_bits))
+        child_2 = Individual(child_2_bits, self.fitness(child_2_bits))
+        
         return child_1, child_2
 
-    def mutate(self, chromosome):
-        """Mutate a chromosome."""
-        bit_pos = random.randint(0, len(chromosome.bits) - 1)
-        chromosome.bits[bit_pos] = not chromosome.bits[bit_pos]
-        chromosome.fitness = self.fitness(chromosome.bits)
-        return chromosome
+    def uniform_crossover(self, parent_1, parent_2):
+        """Perform uniform crossover between two parents."""
+        child_1_bits = bitarray(self.biggest_item)
+        child_2_bits = bitarray(self.biggest_item)
+        for i in range(self.biggest_item):
+            if random.random() < 0.5:
+                child_1_bits[i] = parent_1.bits[i]
+                child_2_bits[i] = parent_2.bits[i]
+            else:
+                child_1_bits[i] = parent_2.bits[i]
+                child_2_bits[i] = parent_1.bits[i]
+        child_1 = Individual(child_1_bits, self.fitness(child_1_bits))
+        child_2 = Individual(child_2_bits, self.fitness(child_2_bits))
+        return child_1, child_2
+    
+    def crossover(self, parent_1, parent_2):
+        """Perform crossover on a random method."""
+        crossover_method = random.choice(
+            [self.single_point_crossover(parent_1,parent_2),
+            self.multi_point_crossover(parent_1,parent_2),
+            self.uniform_crossover(parent_1,parent_2)])
+        return crossover_method
 
+    def mutate(self, Individual):
+        """Mutate an individual."""
+        bit_pos = random.randint(0, len(Individual.bits) - 1)
+        Individual.bits[bit_pos] = not Individual.bits[bit_pos]
+        Individual.fitness = self.fitness(Individual.bits)
+        return Individual
 
     def handle_crossover(self, parent_1, parent_2, new_population):
         """Add crossover offspring to the population."""
         child_1, child_2 = self.crossover(parent_1, parent_2)
-        if not self.chromosome_exists(child_1.bits):
+        if not self.individual_exists(child_1.bits):
             new_population.append(child_1)
             if child_1.fitness >= self.min_utility:
                 self.insert_hui_set(child_1)
-        if not self.chromosome_exists(child_2.bits):
+        if not self.individual_exists(child_2.bits):
             new_population.append(child_2)
             if child_2.fitness >= self.min_utility:
                 self.insert_hui_set(child_2)
 
     def handle_mutate(self, new_population):
-        """Add mutated chromosome to the population."""
+        """Add mutated offspring to the population."""
         mutated = self.mutate(random.choice(new_population))
-        if not self.chromosome_exists(mutated.bits):
+        if not self.individual_exists(mutated.bits):
             new_population.append(mutated)
             if mutated.fitness >= self.min_utility:
                 self.insert_hui_set(mutated)
-    
+
+    def select_parents(self):
+        """Select two distinct parents from the population."""
+        parent_1 = random.choice([self.tournament_selection(), self.roulette_wheel_selection(), self.rank_selection()])
+        parent_2 = parent_1
+        while parent_2 == parent_1:
+            parent_2 = random.choice([self.tournament_selection(), self.roulette_wheel_selection(), self.rank_selection()])
+        return parent_1, parent_2
+
+    def handle_offspring(self, parent_1, parent_2, new_population):
+        """Handle crossover and mutation of offspring."""
+        if random.random() < self.crossover_prob:
+            self.handle_crossover(parent_1, parent_2, new_population)
+        if random.random() < self.mutation_prob:
+            self.handle_mutate(new_population)
+
     def generate_offspring(self, new_population):
         """Generate offspring by crossover and mutation."""
         while len(new_population) < self.population_size:
             parent_1, parent_2 = self.select_parents()
-            if random.random() < self.crossover_prob:
-                self.handle_crossover(parent_1, parent_2, new_population)
-            else:
-                new_population.extend([parent_1, parent_2])
+            new_population.extend([parent_1, parent_2])
+            self.handle_offspring(parent_1, parent_2, new_population)
 
-            if random.random() < self.mutation_prob:
-                self.handle_mutate(new_population)
+        if len(new_population) > self.population_size:
+            new_population = new_population[:self.population_size]
 
     def update_population(self, new_population):
-        """Update the population with new chromosomes."""
-        self.population = sorted(new_population, key=lambda x: x.fitness, reverse=True)
+        """Update the population with new Individuals."""
+        new_population_sorted = sorted(new_population, key=lambda x: x.fitness, reverse=True)
+        self.population = new_population_sorted[:self.population_size]
 
     def evolve_population(self):
-            """Evolve the population over several generations."""
-            for generation in range(self.generations):
-                start_time = time.time()
-                new_population = self.population[:self.population_size // 2]
-                print(f"+ Generation {generation + 1}:", end=" ")
-                self.generate_offspring(new_population)
-                total_time = time.time() - start_time
-                print(f"~ {total_time:.3f} s")
-                self.total_time += total_time
-            self.update_population(new_population)
+        """Evolve the population over several generations."""
+        for generation in range(self.generations):
+            start_time = time.time()
+            new_population = []
+            print(f"+ Generation {generation + 1}:", end=" ")
+            self.generate_offspring(new_population)
+            total_time = time.time() - start_time
+            print(f"~ {total_time:.3f} s")
+            self.total_time += total_time
+        self.update_population(new_population)
 
     def report_performance(self):
         """Report performance metrics."""
-        memory_info = psutil.Process().memory_info()
-        print(f"> High-utility itemsets found: {len(self.hui_sets)}")
+        self.total_memory = psutil.Process().memory_info().rss
+        print(f"> High-utility item-sets found: {len(self.hui_sets)}")
         print(f"> Total time: ~ {self.total_time:.3f} s")
-        print(f"> Max memory: ~ {memory_info.rss / 1024 / 1024:.3f} MB")
-        self.total_memory = f"Max memory: ~ {memory_info.rss / 1024 / 1024:.3f} MB"
+        print(f"> Max memory: ~ {self.total_memory / 1024 / 1024:.3f} MB")
+    
+    def write_header(self, file):
+        """Write header information to the file."""
+        file.write(f'Genetic Algorithm Result For Database: {os.path.splitext(os.path.basename(self.dataset_path))[0]} \n')
+        file.write(f'Total time: {self.total_time:.3f} s\n')
+        file.write(f'Max memory: ~ {self.total_memory / 1024 / 1024:.3f} MB\n')
+        file.write(f"Total High-utility itemsets found: {len(self.hui_sets)}\n\n")
 
+
+    def write_hui_sets(self, file):
+        """Write high-utility itemsets to the file."""
+        for bits, fitness in self.hui_sets:
+            if fitness >= self.min_utility:
+                items = [i + 1 for i in range(len(bits)) if bits[i]]
+                items_str = " ".join(str(item) for item in items)
+                file.write(f"{items_str} #UTIL: {fitness}\n")
+                
     def save_files(self):
         """Save results to an output file."""
-        with open(self.output, "w") as f:
-            f.write(f"Total High-utility itemsets found: {len(self.hui_sets)}\n")
-            f.write(f'Total time: {self.total_time:.3f} s\n')
-            f.write(self.total_memory + '\n')
-            f.write("-------------------\n")
-            for bits, fitness in self.hui_sets:
-                if fitness >= self.min_utility:
-                    items = [i + 1 for i in range(len(bits)) if bits[i]]
-                    items_str = " ".join(str(item) for item in items)
-                    f.write(f"{items_str} #UTIL: {fitness}\n")
+        with open(self.output, "w") as file:
+            self.write_header(file)
+            self.write_hui_sets(file)
 
     def execute(self):
         """Execute the genetic algorithm."""
