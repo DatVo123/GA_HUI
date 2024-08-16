@@ -128,7 +128,7 @@ class GeneticAlgorithm:
         return child_1, child_2
 
     def multi_point_crossover(self, parent_1, parent_2):
-        """Perform multi-point crossover between two parents with random k."""
+        """Perform multi-point crossover between two parents with random."""
         points = sorted(random.sample(range(self.biggest_item), self.biggest_item//2))
         child_1_bits = parent_1.bits[:points[0]]
         child_2_bits = parent_2.bits[:points[0]]
@@ -206,13 +206,13 @@ class GeneticAlgorithm:
     def handle_mutate(self, new_population):
         """Add mutated offspring to the population"""
         try:
-            mutated = self.mutate(random.choice(new_population))
-            
-            if not self.individual_exists(mutated.bits):
-                new_population.append(mutated)
-                if mutated.fitness >= self.min_utility:
-                    self.insert_hui_set(mutated)
-        
+            num_mutations = len(new_population)//8
+            for _ in range(num_mutations):
+                mutated = self.mutate(random.choice(new_population))
+                if not self.individual_exists(mutated.bits):
+                    new_population.append(mutated)
+                    if mutated.fitness >= self.min_utility:
+                        self.insert_hui_set(mutated)
         except Exception as e:
             print(f"An error occurred during mutation: {e}")
 
@@ -240,13 +240,11 @@ class GeneticAlgorithm:
                 new_population.extend([parent_1, parent_2])
             self.handle_offspring(parent_1, parent_2, new_population)
 
-        if len(new_population) > self.population_size:
-            new_population = new_population[:self.population_size]
-
     def update_population(self, new_population):
         """Update the population with new Individuals."""
         new_population_sorted = sorted(new_population, key=lambda x: x.fitness, reverse=True)
-        self.population = new_population_sorted[:self.population_size]
+        if len(new_population) > self.population_size:
+            self.population = new_population_sorted[:self.population_size]
 
     def evolve_population(self):
         """Evolve the population over several generations"""
