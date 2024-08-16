@@ -8,7 +8,7 @@ class Individual:
         self.fitness = fitness
 
 class Transaction:
-    def __init__(self, tran_bits, value_items, length=0):
+    def __init__(self, tran_bits, value_items, length):
         bits = bitarray(length)
         bits.setall(0)
         self.tran_bits = tran_bits if tran_bits else bits

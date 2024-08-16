@@ -28,17 +28,25 @@ class GeneticAlgorithm:
         """Load transactions from the dataset."""
         print("* Loading transactions...")
         start_time = time.time()
-        self.transactions = self.processor.load_transactions(self.dataset_path)
-        self.biggest_item = self.processor.biggest_item
-        self.avg_len = sum(len(tran.tran_bits) for tran in self.transactions) // len(self.transactions)
-        total_time = time.time() - start_time
-        print(f"* Loading successful: ~ {total_time:.3f} s")
-        self.total_time += total_time
+        try:
+            self.transactions = self.processor.load_transactions(self.dataset_path)
+            self.biggest_item = self.processor.biggest_item
+            self.avg_len = sum(len(tran.tran_bits) for tran in self.transactions) // len(self.transactions)
+            total_time = time.time() - start_time
+            print(f"* Loading successful: ~ {total_time:.3f} s")
+            self.total_time += total_time
+        except Exception as e:
+            print(f"Error occurred while loading transactions: {e}")
+
 
     def fitness(self, Individual_bits):
         """Calculate the fitness of an individual."""
-        calculator = FitnessCalculator(self.transactions, Individual_bits)
-        return calculator.calculate()
+        try:
+            calculator = FitnessCalculator(self.transactions, Individual_bits)
+            return calculator.calculate()
+        except Exception as e:
+            print(f"Error occurred while calculating fitness: {e}")
+            return 0
 
     def individual_exists(self, individual_bits):
         """Check if an individual already exists in the population."""
@@ -57,37 +65,37 @@ class GeneticAlgorithm:
         """Generate the initial population of Individuals."""
         print("* Generating initial population...")
         start_time = time.time()
-        population = []
 
-        while len(population) < self.population_size:
-            Individual_bits = bitarray(self.biggest_item)
-            Individual_bits.setall(0)
-            
-            n = random.randint(1, self.avg_len)
-            random_positions = random.sample(range(self.biggest_item), n)
-            
-            for pos in random_positions:
-                Individual_bits[pos] = 1
+        try:
+            while len(self.population) < self.population_size:
+                Individual_bits = bitarray(self.biggest_item)
+                Individual_bits.setall(0)
 
-            individual = Individual(Individual_bits)
-            individual.fitness = self.fitness(individual.bits)
+                n = random.randint(1, self.avg_len)
+                random_positions = random.sample(range(self.biggest_item), n)
+                for pos in random_positions:
+                    Individual_bits[pos] = 1
 
-            if not self.individual_exists(individual.bits):
-                if individual.fitness >= self.min_utility:
-                    self.insert_hui_set(individual)
-                population.append(individual)
+                individual = Individual(Individual_bits)
+                individual.fitness = self.fitness(individual.bits)
+                if not self.individual_exists(individual.bits):
+                    if individual.fitness is not None and individual.fitness >= self.min_utility:
+                        self.insert_hui_set(individual)
+                    self.population.append(individual)
 
-        self.population = sorted(population, key=lambda x: x.fitness, reverse=True)
+        except Exception as e:
+            print(f"Error occurred during initial population generation: {e}")
+
         total_time = time.time() - start_time
         print(f"* Population generated: ~ {total_time:.3f} s")
         self.total_time += total_time
-    
+
     def tournament_selection(self):
         """Select a subset of individuals and choose the best one from the subset."""
-        k = random.randint(1,5)
+        k = random.randint(1,len(self.population))
         tournament = random.sample(self.population, k)
         return max(tournament, key=lambda x: x.fitness)
-    
+
     def roulette_wheel_selection(self):
         """Select an individual based on the fitness proportionate to the total fitness of the population."""
         total_fitness = sum(individual.fitness for individual in self.population)
@@ -97,15 +105,18 @@ class GeneticAlgorithm:
         selection_probabilities = [individual.fitness / total_fitness for individual in self.population]
         selected_index = random.choices(range(len(self.population)), weights=selection_probabilities, k=1)[0]
         return self.population[selected_index]
-    
+
     def rank_selection(self):
         """Select an individual based on its rank in the sorted population."""
         sorted_population = sorted(self.population, key=lambda x: x.fitness, reverse=True)
-        total_ranks = sum(range(1, len(sorted_population) + 1))
-        rank_probabilities = [rank / total_ranks for rank in range(1, len(sorted_population) + 1)]
-        selected_index = random.choices(range(len(sorted_population)), weights=rank_probabilities, k=1)[0]
+        num_individuals = len(sorted_population)
+        total_ranks = sum(range(1, num_individuals + 1))
+        rank_probabilities = [(num_individuals - rank + 1) / total_ranks for rank in range(1, num_individuals + 1)]
+        
+        selected_index = random.choices(range(num_individuals), weights=rank_probabilities, k=1)[0]
         return sorted_population[selected_index]
-    
+
+
     def single_point_crossover(self, parent_1, parent_2):
         """Perform single_point crossover between two parents."""
         s = random.randint(1, self.biggest_item // 2)
@@ -115,11 +126,10 @@ class GeneticAlgorithm:
         child_1 = Individual(child_1_bits, self.fitness(child_1_bits))
         child_2 = Individual(child_2_bits, self.fitness(child_2_bits))
         return child_1, child_2
-    
+
     def multi_point_crossover(self, parent_1, parent_2):
         """Perform multi-point crossover between two parents with random k."""
-        k = random.randint(1, 5)
-        points = sorted(random.sample(range(self.biggest_item), k))
+        points = sorted(random.sample(range(self.biggest_item), self.biggest_item//2))
         child_1_bits = parent_1.bits[:points[0]]
         child_2_bits = parent_2.bits[:points[0]]
         
@@ -166,32 +176,45 @@ class GeneticAlgorithm:
             self.uniform_crossover(parent_1,parent_2)])
         return crossover_method
 
-    def mutate(self, Individual):
+    def mutate(self, individual):
         """Mutate an individual."""
-        bit_pos = random.randint(0, len(Individual.bits) - 1)
-        Individual.bits[bit_pos] = not Individual.bits[bit_pos]
-        Individual.fitness = self.fitness(Individual.bits)
-        return Individual
+        bit_pos = random.randint(0, len(individual.bits) - 1)
+        individual.bits[bit_pos] = not individual.bits[bit_pos]
+        individual.fitness = self.fitness(individual.bits)
+        return individual
 
     def handle_crossover(self, parent_1, parent_2, new_population):
-        """Add crossover offspring to the population."""
-        child_1, child_2 = self.crossover(parent_1, parent_2)
-        if not self.individual_exists(child_1.bits):
-            new_population.append(child_1)
-            if child_1.fitness >= self.min_utility:
-                self.insert_hui_set(child_1)
-        if not self.individual_exists(child_2.bits):
-            new_population.append(child_2)
-            if child_2.fitness >= self.min_utility:
-                self.insert_hui_set(child_2)
+        """Add crossover offspring to the population"""
+        try:
+            child_1, child_2 = self.crossover(parent_1, parent_2)
+            
+            # Handle the first child
+            if not self.individual_exists(child_1.bits):
+                new_population.append(child_1)
+                if child_1.fitness >= self.min_utility:
+                    self.insert_hui_set(child_1)
+            
+            # Handle the second child
+            if not self.individual_exists(child_2.bits):
+                new_population.append(child_2)
+                if child_2.fitness >= self.min_utility:
+                    self.insert_hui_set(child_2)
+        
+        except Exception as e:
+            print(f"An error occurred during crossover: {e}")
 
     def handle_mutate(self, new_population):
-        """Add mutated offspring to the population."""
-        mutated = self.mutate(random.choice(new_population))
-        if not self.individual_exists(mutated.bits):
-            new_population.append(mutated)
-            if mutated.fitness >= self.min_utility:
-                self.insert_hui_set(mutated)
+        """Add mutated offspring to the population"""
+        try:
+            mutated = self.mutate(random.choice(new_population))
+            
+            if not self.individual_exists(mutated.bits):
+                new_population.append(mutated)
+                if mutated.fitness >= self.min_utility:
+                    self.insert_hui_set(mutated)
+        
+        except Exception as e:
+            print(f"An error occurred during mutation: {e}")
 
     def select_parents(self):
         """Select two distinct parents from the population."""
@@ -210,9 +233,11 @@ class GeneticAlgorithm:
 
     def generate_offspring(self, new_population):
         """Generate offspring by crossover and mutation."""
+        first_run = len(new_population) <= 2
         while len(new_population) < self.population_size:
             parent_1, parent_2 = self.select_parents()
-            new_population.extend([parent_1, parent_2])
+            if first_run:
+                new_population.extend([parent_1, parent_2])
             self.handle_offspring(parent_1, parent_2, new_population)
 
         if len(new_population) > self.population_size:
@@ -224,16 +249,20 @@ class GeneticAlgorithm:
         self.population = new_population_sorted[:self.population_size]
 
     def evolve_population(self):
-        """Evolve the population over several generations."""
-        for generation in range(self.generations):
-            start_time = time.time()
-            new_population = []
-            print(f"+ Generation {generation + 1}:", end=" ")
-            self.generate_offspring(new_population)
-            total_time = time.time() - start_time
-            print(f"~ {total_time:.3f} s")
-            self.total_time += total_time
-        self.update_population(new_population)
+        """Evolve the population over several generations"""
+        try:
+            for generation in range(self.generations):
+                start_time = time.time()
+                new_population = []
+                print(f"+ Generation {generation + 1}:", end=" ")
+                self.generate_offspring(new_population)
+                total_time = time.time() - start_time
+                print(f"~ {total_time:.3f} s")
+                self.total_time += total_time
+            self.update_population(new_population)
+        
+        except Exception as e:
+            print(f"An error occurred during population evolution: {e}")
 
     def report_performance(self):
         """Report performance metrics."""
@@ -241,14 +270,13 @@ class GeneticAlgorithm:
         print(f"> High-utility item-sets found: {len(self.hui_sets)}")
         print(f"> Total time: ~ {self.total_time:.3f} s")
         print(f"> Max memory: ~ {self.total_memory / 1024 / 1024:.3f} MB")
-    
+
     def write_header(self, file):
         """Write header information to the file."""
         file.write(f'Genetic Algorithm Result For Database: {os.path.splitext(os.path.basename(self.dataset_path))[0]} \n')
         file.write(f'Total time: {self.total_time:.3f} s\n')
         file.write(f'Max memory: ~ {self.total_memory / 1024 / 1024:.3f} MB\n')
         file.write(f"Total High-utility itemsets found: {len(self.hui_sets)}\n\n")
-
 
     def write_hui_sets(self, file):
         """Write high-utility itemsets to the file."""
@@ -257,7 +285,7 @@ class GeneticAlgorithm:
                 items = [i + 1 for i in range(len(bits)) if bits[i]]
                 items_str = " ".join(str(item) for item in items)
                 file.write(f"{items_str} #UTIL: {fitness}\n")
-                
+
     def save_files(self):
         """Save results to an output file."""
         with open(self.output, "w") as file:
@@ -271,3 +299,4 @@ class GeneticAlgorithm:
         self.evolve_population()
         self.report_performance()
         self.save_files()
+

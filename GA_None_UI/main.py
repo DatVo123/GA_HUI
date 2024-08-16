@@ -1,11 +1,11 @@
 from ga import GeneticAlgorithm
 
 if __name__ == '__main__':
-    dataset_path = 'Dataset/test.txt'
-    generations = 25
-    population_size = 30
-    crossover_prob = 0.5
-    mutation_prob = 0.1
+    dataset_path = 'Dataset/smallDB.txt'
+    generations = 20
+    population_size = 50
+    crossover_prob = 0.8
+    mutation_prob = 0.2
     min_utility = 10
     output = "output.txt"
 
