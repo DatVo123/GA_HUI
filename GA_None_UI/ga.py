@@ -26,18 +26,17 @@ class GeneticAlgorithm:
 
     def load_transactions(self):
         """Load transactions from the dataset."""
-        print("* Loading transactions...")
+        print("* Loading Transactions...")
         start_time = time.time()
         try:
             self.transactions = self.processor.load_transactions(self.dataset_path)
             self.biggest_item = self.processor.biggest_item
             self.avg_len = sum(len(tran.tran_bits) for tran in self.transactions) // len(self.transactions)
             total_time = time.time() - start_time
-            print(f"* Loading successful: ~ {total_time:.3f} s")
+            print(f"\t> Loaded Successful: ~ {total_time:.3f} s")
             self.total_time += total_time
         except Exception as e:
             print(f"Error occurred while loading transactions: {e}")
-
 
     def fitness(self, Individual_bits):
         """Calculate the fitness of an individual."""
@@ -63,7 +62,7 @@ class GeneticAlgorithm:
 
     def generate_initial_population(self):
         """Generate the initial population of Individuals."""
-        print("* Generating initial population...")
+        print("* Generating Initial Population...")
         start_time = time.time()
 
         try:
@@ -83,11 +82,12 @@ class GeneticAlgorithm:
                         self.insert_hui_set(individual)
                     self.population.append(individual)
 
+            self.population = sorted(self.population, key=lambda x: x.fitness, reverse=True)
         except Exception as e:
             print(f"Error occurred during initial population generation: {e}")
 
         total_time = time.time() - start_time
-        print(f"* Population generated: ~ {total_time:.3f} s")
+        print(f"\t> Generated Population : ~ {total_time:.3f} s")
         self.total_time += total_time
 
     def tournament_selection(self):
@@ -112,10 +112,8 @@ class GeneticAlgorithm:
         num_individuals = len(sorted_population)
         total_ranks = sum(range(1, num_individuals + 1))
         rank_probabilities = [(num_individuals - rank + 1) / total_ranks for rank in range(1, num_individuals + 1)]
-        
         selected_index = random.choices(range(num_individuals), weights=rank_probabilities, k=1)[0]
         return sorted_population[selected_index]
-
 
     def single_point_crossover(self, parent_1, parent_2):
         """Perform single_point crossover between two parents."""
@@ -157,6 +155,7 @@ class GeneticAlgorithm:
         """Perform uniform crossover between two parents."""
         child_1_bits = bitarray(self.biggest_item)
         child_2_bits = bitarray(self.biggest_item)
+        
         for i in range(self.biggest_item):
             if random.random() < 0.5:
                 child_1_bits[i] = parent_1.bits[i]
@@ -164,10 +163,11 @@ class GeneticAlgorithm:
             else:
                 child_1_bits[i] = parent_2.bits[i]
                 child_2_bits[i] = parent_1.bits[i]
+        
         child_1 = Individual(child_1_bits, self.fitness(child_1_bits))
         child_2 = Individual(child_2_bits, self.fitness(child_2_bits))
         return child_1, child_2
-    
+
     def crossover(self, parent_1, parent_2):
         """Perform crossover on a random method."""
         crossover_method = random.choice(
@@ -188,18 +188,15 @@ class GeneticAlgorithm:
         try:
             child_1, child_2 = self.crossover(parent_1, parent_2)
             
-            # Handle the first child
             if not self.individual_exists(child_1.bits):
                 new_population.append(child_1)
                 if child_1.fitness >= self.min_utility:
                     self.insert_hui_set(child_1)
             
-            # Handle the second child
             if not self.individual_exists(child_2.bits):
                 new_population.append(child_2)
                 if child_2.fitness >= self.min_utility:
                     self.insert_hui_set(child_2)
-        
         except Exception as e:
             print(f"An error occurred during crossover: {e}")
 
@@ -233,11 +230,8 @@ class GeneticAlgorithm:
 
     def generate_offspring(self, new_population):
         """Generate offspring by crossover and mutation."""
-        first_run = len(new_population) <= 2
         while len(new_population) < self.population_size:
             parent_1, parent_2 = self.select_parents()
-            if first_run:
-                new_population.extend([parent_1, parent_2])
             self.handle_offspring(parent_1, parent_2, new_population)
 
     def update_population(self, new_population):
@@ -249,32 +243,34 @@ class GeneticAlgorithm:
     def evolve_population(self):
         """Evolve the population over several generations"""
         try:
+            print("* Evolving Population...")
             for generation in range(self.generations):
                 start_time = time.time()
-                new_population = []
-                print(f"+ Generation {generation + 1}:", end=" ")
+                new_population = self.population[:self.population_size//2]
+                print(f"\t> Completed Generation {generation + 1} in:", end=" ")
                 self.generate_offspring(new_population)
                 total_time = time.time() - start_time
                 print(f"~ {total_time:.3f} s")
                 self.total_time += total_time
-            self.update_population(new_population)
-        
+                self.update_population(new_population)
+
         except Exception as e:
             print(f"An error occurred during population evolution: {e}")
 
     def report_performance(self):
         """Report performance metrics."""
         self.total_memory = psutil.Process().memory_info().rss
-        print(f"> High-utility item-sets found: {len(self.hui_sets)}")
-        print(f"> Total time: ~ {self.total_time:.3f} s")
-        print(f"> Max memory: ~ {self.total_memory / 1024 / 1024:.3f} MB")
+        print(f"* Report performance for database: {os.path.splitext(os.path.basename(self.dataset_path))[0]}")
+        print(f"\t> Total High-utility item-sets found: {len(self.hui_sets)}")
+        print(f"\t> Total time: ~ {self.total_time:.3f} s")
+        print(f"\t> Total memory used: ~ {self.total_memory / 1024 / 1024:.3f} MB")
 
     def write_header(self, file):
         """Write header information to the file."""
         file.write(f'Genetic Algorithm Result For Database: {os.path.splitext(os.path.basename(self.dataset_path))[0]} \n')
         file.write(f'Total time: {self.total_time:.3f} s\n')
-        file.write(f'Max memory: ~ {self.total_memory / 1024 / 1024:.3f} MB\n')
-        file.write(f"Total High-utility itemsets found: {len(self.hui_sets)}\n\n")
+        file.write(f'Total memory used: ~ {self.total_memory / 1024 / 1024:.3f} MB\n')
+        file.write(f"Total High-utility item-sets found: {len(self.hui_sets)}\n\n")
 
     def write_hui_sets(self, file):
         """Write high-utility itemsets to the file."""
@@ -292,9 +288,11 @@ class GeneticAlgorithm:
 
     def execute(self):
         """Execute the genetic algorithm."""
-        self.load_transactions()
-        self.generate_initial_population()
-        self.evolve_population()
-        self.report_performance()
-        self.save_files()
-
+        try:
+            self.load_transactions()
+            self.generate_initial_population()
+            self.evolve_population()
+            self.report_performance()
+            self.save_files()
+        except Exception as e:
+            print(f"An error occurred during the execution of the genetic algorithm: {e}")
