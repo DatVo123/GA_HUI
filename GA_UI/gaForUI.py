@@ -253,17 +253,16 @@ class GeneticAlgorithm(QObject):
     def evolve_population(self):
         """Evolve the population over several generations"""
         try:
-            print("* Evolving Population...")
             for generation in range(self.generations):
                 start_time = time.time()
-                if self.cancel_requested:
-                    return
                 new_population = self.population[:self.population_size//2]
                 self.generate_offspring(new_population)
                 total_time = time.time() - start_time
                 self.total_time += total_time
-                self.progress_update.emit(f"Evolving Generation {generation + 1} in ~ {self.total_time:.3f} s")
+                self.progress_update.emit(f"Evolving Generation {generation + 1} in ~ {total_time:.3f} s")
                 self.update_population(new_population)
+                if self.cancel_requested:
+                    return
 
         except Exception as e:
             print(f"An error occurred during population evolution: {e}")
@@ -272,7 +271,6 @@ class GeneticAlgorithm(QObject):
         """Report performance metrics."""
         self.total_memory = psutil.Process().memory_info().rss
         self.progress_update.emit(f"\nReport performance for database: {os.path.splitext(os.path.basename(self.dataset_path))[0]}")
-        self.progress_update.emit(f"Total High-utility item-sets found: {len(self.hui_sets)}")
         self.progress_update.emit(f"Total time: ~ {self.total_time:.3f} s")
         self.progress_update.emit(f"Total memory used: ~ {self.total_memory / 1024 / 1024:.3f} MB")
 
@@ -304,9 +302,9 @@ class GeneticAlgorithm(QObject):
             self.generate_initial_population()
             self.evolve_population()
             self.cancel_progress()
+            self.report_performance()
         except Exception as e:
             print(f"An error occurred during the execution of the genetic algorithm: {e}")
     def cancel_progress(self):
         if self.cancel_requested:
             self.progress_update.emit("\nAlgorithm execution has been canceled.")
-            self.report_performance()

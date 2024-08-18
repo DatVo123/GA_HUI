@@ -1,7 +1,7 @@
 from ga import GeneticAlgorithm
 
 if __name__ == '__main__':
-    dataset_path = 'Dataset/chess.txt'
+    dataset_path = 'Dataset/smallDB.txt'
     generations = 10
     population_size = 50
     crossover_prob = 0.8
