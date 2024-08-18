@@ -1,3 +1,4 @@
+import os
 import sys
 from PyQt6.QtWidgets import (
     QApplication,
@@ -17,71 +18,9 @@ from PyQt6.QtWidgets import (
     QGroupBox,
 )
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-import time
-from gaForUI import GeneticAlgorithm
+from PyQt6.QtCore import Qt
 
-
-class Worker(QThread):
-    progress_update = pyqtSignal(str)
-    finished = pyqtSignal(object)
-
-    def __init__(
-        self,
-        dataset_path,
-        min_utility,
-        population_size,
-        generations,
-        crossover_prob,
-        mutation_prob,
-    ):
-        super().__init__()
-        self.dataset_path = dataset_path
-        self.min_utility = min_utility
-        self.population_size = population_size
-        self.generations = generations
-        self.crossover_prob = crossover_prob
-        self.mutation_prob = mutation_prob
-        self.ga = None
-        self.cancel_requested = False
-
-    def run(self):
-        try:
-            start_time = time.time()
-            self.ga = GeneticAlgorithm(
-                self.dataset_path,
-                self.min_utility,
-                self.population_size,
-                self.generations,
-                self.crossover_prob,
-                self.mutation_prob,
-            )
-            self.ga.progress_update.connect(self.progress_update.emit)
-            self.ga.execute()
-
-            if self.cancel_requested:
-                self.finished.emit(None)
-                self.reset_status()
-            else:
-                end_time = time.time()
-                elapsed_time = end_time - start_time
-                self.progress_update.emit(
-                    f"Completed in {time.strftime('%H:%M:%S', time.gmtime(elapsed_time))}s"
-                )
-                self.finished.emit(self.ga)
-        except Exception as e:
-            self.finished.emit(e)
-
-    def cancel_execution(self):
-        self.cancel_requested = True
-        if self.ga:
-            self.ga.cancel_requested = True
-
-    def reset_status(self):
-        self.cancel_requested = False
-        if self.ga:
-            self.ga.cancel_requested = False
-
+from worker import Worker
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -264,9 +203,9 @@ class MainWindow(QMainWindow):
         file_path, _ = file_dialog.getOpenFileName(self, "Open Dataset File")
         if file_path:
             self.dataset_path = file_path
-            self.file_path_label.setText(f"{file_path}")
+            self.file_path_label.setText(f"Selected Database: {os.path.splitext(os.path.basename(self.dataset_path))[0]}")
             QMessageBox.information(
-                self, "File Selected", f"Dataset file selected: {file_path}"
+                self, "File Selected", f"Selected Database: {os.path.splitext(os.path.basename(self.dataset_path))[0]}"
             )
 
     def run_genetic_algorithm(self):
@@ -277,10 +216,9 @@ class MainWindow(QMainWindow):
                 )
 
             self.reset_algorithm()
-
             min_utility = int(self.min_utility_textbox.text())
-            population_size = int(self.population_size_textbox.text())
             generations = int(self.generations_textbox.text())
+            population_size = int(self.population_size_textbox.text())
             crossover_prob = float(self.crossover_prob_textbox.text())
             mutation_prob = float(self.mutation_prob_textbox.text())
 
@@ -293,23 +231,16 @@ class MainWindow(QMainWindow):
                 raise ValueError(
                     "Mutation Probability must be greater than 0 and less than or equal to 1."
                 )
-
+            #Progress Dialog
             self.progress_dialog = QProgressDialog(
-                "Running Genetic Algorithm...", "Cancel", 0, 0, self
-            )
-            self.progress_dialog.setWindowTitle("GA Progress")
+                    "Running Genetic Algorithm...", "Cancel", 0, 0, self)
+            self.progress_dialog.setWindowTitle("Genetic Algorithm Progress")
             self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
             self.progress_dialog.setMinimumDuration(0)
             self.progress_dialog.canceled.connect(self.cancel_algorithm)
-
-            self.worker = Worker(
-                self.dataset_path,
-                min_utility,
-                population_size,
-                generations,
-                crossover_prob,
-                mutation_prob,
-            )
+            
+            #Call Worker
+            self.worker = Worker(self.dataset_path, min_utility, generations, population_size, crossover_prob, mutation_prob)
             self.worker.progress_update.connect(self.update_progress_dialog)
             self.worker.finished.connect(self.genetic_algorithm_finished)
             self.worker.start()
@@ -327,40 +258,32 @@ class MainWindow(QMainWindow):
     def cancel_algorithm(self):
         if hasattr(self, "worker") and isinstance(self.worker, Worker):
             self.worker.finished.disconnect(self.genetic_algorithm_finished)
+            self.display_output(self.worker.ga)
             self.worker.cancel_execution()
 
     def genetic_algorithm_finished(self, result):
         if isinstance(result, Exception):
             QMessageBox.critical(self, "Error", f"An error occurred: {str(result)}")
         else:
-            if result is None and not self.worker.cancel_requested:
-                QMessageBox.warning(
-                    self, "Canceled", "Genetic algorithm execution canceled."
-                )
-                self.worker.reset_status()
-            else:
-                ga = result
-                output_text = f"Total High-utility itemsets found: {len(ga.hui_sets)}\n--------------------------------------\n"
-                for bits, fitness in ga.hui_sets:
-                    if fitness >= int(self.min_utility_textbox.text()):
-                        items = [i + 1 for i in range(len(bits)) if bits[i]]
-                        items_str = " ".join(map(str, items))
-                        output_text += f"{items_str} #UTIL: {fitness}\n"
-                output_text += ga.total_time
-                output_text += ga.total_memory
-                self.output_textbox.setText(output_text)
-                self.worker.reset_status()
-                if not self.worker.cancel_requested:
-                    QMessageBox.information(
-                        self, "Success", "Genetic algorithm executed successfully."
-                    )
-
+            ga = result
+            self.display_output(ga)
+            self.worker.reset_status()
+            if not self.worker.cancel_requested:
+                QMessageBox.information(self, "Success", "Genetic algorithm executed successfully.")
         self.progress_dialog.close()
 
     def update_progress_dialog(self, text):
         self.progress_dialog.setLabelText(text)
         self.running_info_textbox.append(text)
 
+    def display_output(self, ga):
+        output_text = f"Total High-utility itemsets found: {len(ga.hui_sets)}\n--------------------------------------\n"
+        for bits, fitness in ga.hui_sets:
+            if fitness >= int(self.min_utility_textbox.text()):
+                items = [i + 1 for i in range(len(bits)) if bits[i]]
+                items_str = " ".join(map(str, items))
+                output_text += f"{items_str} #UTIL: {fitness}\n"
+        self.output_textbox.setText(output_text)
     def save_output_to_file(self):
         output_text = self.output_textbox.toPlainText()
         if output_text:
@@ -369,24 +292,26 @@ class MainWindow(QMainWindow):
                 self, "Save Output As", "", "Text Files (*.txt)"
             )
             if output_path:
-                with open(output_path, "w") as file:
-                    file.write(output_text)
+                self.worker.ga.save_files(output_path)
                 QMessageBox.information(self, "Success", "Output saved successfully.")
                 self.refresh_fields()
         else:
             QMessageBox.warning(self, "Warning", "No output to save.")
 
     def refresh_fields(self):
-        self.min_utility_textbox.clear()
-        self.population_size_textbox.clear()
-        self.generations_textbox.clear()
-        self.crossover_prob_textbox.clear()
-        self.mutation_prob_textbox.clear()
-        self.output_textbox.clear()
-        self.running_info_textbox.clear()
-        self.dataset_path = ""
-        self.file_path_label.clear()
-        QMessageBox.information(self, "Refreshed", "All fields have been cleared.")
+        try:
+            self.min_utility_textbox.clear()
+            self.population_size_textbox.clear()
+            self.generations_textbox.clear()
+            self.crossover_prob_textbox.clear()
+            self.mutation_prob_textbox.clear()
+            self.output_textbox.clear()
+            self.running_info_textbox.clear()
+            self.dataset_path = ""
+            self.file_path_label.clear()
+            QMessageBox.information(self, "Refreshed", "All fields have been cleared.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")            
 
 
 if __name__ == "__main__":
