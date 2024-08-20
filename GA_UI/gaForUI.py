@@ -49,7 +49,7 @@ class GeneticAlgorithm(QObject):
             calculator = FitnessCalculator(self.transactions, Individual_bits)
             return calculator.calculate()
         except Exception as e:
-            print(f"Error occurred while calculating fitness: {e}")
+            self.progress_update.emit(f"Error occurred while calculating fitness: {e}")
             return 0
 
     def individual_exists(self, individual_bits):
@@ -92,10 +92,10 @@ class GeneticAlgorithm(QObject):
 
             self.population = sorted(self.population, key=lambda x: x.fitness, reverse=True)
         except Exception as e:
-            print(f"Error occurred during initial population generation: {e}")
+            self.progress_update.emit(f"Error occurred during initial population generation: {e}")
 
         total_time = time.time() - start_time
-        self.progress_update.emit(f"Generated Population : ~ {total_time:.3f} s")
+        self.progress_update.emit(f"Generated Population in ~ {total_time:.3f} s")
         self.total_time += total_time
 
     def tournament_selection(self):
@@ -206,7 +206,8 @@ class GeneticAlgorithm(QObject):
                 if child_2.fitness >= self.min_utility:
                     self.insert_hui_set(child_2)
         except Exception as e:
-            print(f"An error occurred during crossover: {e}")
+            self.progress_update.emit(f"An error occurred during crossover: {e}")
+            return
 
     def handle_mutate(self, new_population):
         """Add mutated offspring to the population"""
@@ -219,7 +220,8 @@ class GeneticAlgorithm(QObject):
                     if mutated.fitness >= self.min_utility:
                         self.insert_hui_set(mutated)
         except Exception as e:
-            print(f"An error occurred during mutation: {e}")
+            self.progress_update.emit(f"An error occurred during mutation: {e}")
+            return
 
     def select_parents(self):
         """Select two distinct parents from the population."""
@@ -265,7 +267,8 @@ class GeneticAlgorithm(QObject):
                     return
 
         except Exception as e:
-            print(f"An error occurred during population evolution: {e}")
+            self.progress_update.emit(f"An error occurred during population evolution: {e}")
+            return
 
     def report_performance(self):
         """Report performance metrics."""
@@ -304,7 +307,8 @@ class GeneticAlgorithm(QObject):
             self.cancel_progress()
             self.report_performance()
         except Exception as e:
-            print(f"An error occurred during the execution of the genetic algorithm: {e}")
+            self.progress_update.emit(f"An error occurred during the execution of the genetic algorithm: {e}")
+            return
     def cancel_progress(self):
         if self.cancel_requested:
             self.progress_update.emit("\nAlgorithm execution has been canceled.")

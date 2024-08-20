@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QProgressDialog,
     QGroupBox,
 )
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QKeySequence
 from PyQt6.QtCore import Qt
 
 from worker import Worker
@@ -62,6 +62,8 @@ class MainWindow(QMainWindow):
         )
         self.open_file_button.clicked.connect(self.open_file_dialog)
         header_group_layout.addWidget(self.open_file_button)
+        self.open_file_button.setShortcut(QKeySequence("Ctrl+O"))
+        self.open_file_button.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Label for file path
         self.file_path_label = QLabel("File Path: ")
@@ -82,6 +84,8 @@ class MainWindow(QMainWindow):
         )
         self.run_algorithm_button.clicked.connect(self.run_genetic_algorithm)
         header_group_layout.addWidget(self.run_algorithm_button)
+        self.run_algorithm_button.setShortcut(QKeySequence(Qt.Key.Key_Return))
+        self.run_algorithm_button.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Save output button
         self.save_output_button = QPushButton("Save Output")
@@ -98,6 +102,8 @@ class MainWindow(QMainWindow):
         )
         self.save_output_button.clicked.connect(self.save_output_to_file)
         header_group_layout.addWidget(self.save_output_button)
+        self.save_output_button.setShortcut(QKeySequence("Ctrl+S"))
+        self.save_output_button.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Refresh button
         self.refresh_button = QPushButton("Refresh")
@@ -114,6 +120,8 @@ class MainWindow(QMainWindow):
         )
         self.refresh_button.clicked.connect(self.refresh_fields)
         header_group_layout.addWidget(self.refresh_button)
+        self.refresh_button.setShortcut(QKeySequence("Ctrl+R"))
+        self.refresh_button.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Splitter to divide vertically
         splitter = QSplitter(Qt.Orientation.Vertical)
@@ -145,7 +153,6 @@ class MainWindow(QMainWindow):
         self.min_utility_textbox.setPlaceholderText("Min Utility Value")
         parameters_layout.addWidget(min_utility_label, 0, 0)
         parameters_layout.addWidget(self.min_utility_textbox, 1, 0)
-
         # Generations
         generations_label = QLabel("Generations")
         self.generations_textbox = QLineEdit()
@@ -189,6 +196,7 @@ class MainWindow(QMainWindow):
         self.running_info_textbox.setPlaceholderText("Running Information")
         self.running_info_textbox.setFont(QFont("Courier", 10))
         param_and_running_splitter.addWidget(self.running_info_textbox)
+        param_and_running_splitter.setSizes([self.width() // 2, self.width() // 2])
 
         # Output display
         self.output_textbox = QTextEdit()
@@ -197,6 +205,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.output_textbox)
 
         self.dataset_path = ""
+        self.min_utility_textbox.setFocus()
 
     def open_file_dialog(self):
         file_dialog = QFileDialog()
@@ -207,6 +216,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self, "File Selected", f"Selected Database: {os.path.splitext(os.path.basename(self.dataset_path))[0]}"
             )
+            self.min_utility_textbox.setFocus()
 
     def run_genetic_algorithm(self):
         try:
@@ -277,7 +287,7 @@ class MainWindow(QMainWindow):
         self.running_info_textbox.append(text)
 
     def display_output(self, ga):
-        output_text = f"Total High-utility itemsets found: {len(ga.hui_sets)}\n--------------------------------------\n"
+        output_text = f"Total High-utility item-sets found: {len(ga.hui_sets)}\n--------------------------------------\n"
         for bits, fitness in ga.hui_sets:
             if fitness >= int(self.min_utility_textbox.text()):
                 items = [i + 1 for i in range(len(bits)) if bits[i]]
@@ -310,9 +320,9 @@ class MainWindow(QMainWindow):
             self.dataset_path = ""
             self.file_path_label.clear()
             QMessageBox.information(self, "Refreshed", "All fields have been cleared.")
+            self.min_utility_textbox.setFocus()
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")            
-
+            QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
